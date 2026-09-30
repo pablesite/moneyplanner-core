@@ -10,6 +10,7 @@ from .services_projection import (
     ProjectionService,
     build_projection_inputs,
     earliest_sustainable_retirement_year,
+    sustainable_readiness_month,
     get_assumption_set,
     serialize_assumptions,
 )
@@ -63,6 +64,11 @@ class PlanOverviewService:
             for name in SCENARIOS
         }
         sustainable_year = sustainable_by_scenario[scenario]
+        readiness_month = sustainable_readiness_month(
+            inputs=inputs,
+            assumptions=serialize_assumptions(get_assumption_set(name=scenario)),
+            retirement_year=sustainable_year,
+        )
         desired_year = plan.target_date.year
         sustainable_range = {
             "prudent_year": sustainable_by_scenario["prudent"],
@@ -108,6 +114,9 @@ class PlanOverviewService:
             "target_date": plan.target_date.isoformat(),
             "desired_year": desired_year,
             "sustainable_year": sustainable_year,
+            # Mes del cierre anterior (`sustainable_year - 1`) en que el capital queda
+            # listo; `None` si el motor solo puede dar el año.
+            "sustainable_readiness_month": readiness_month,
             "sustainable_range": sustainable_range,
             "gap_years": (
                 sustainable_year - desired_year if sustainable_year is not None else None

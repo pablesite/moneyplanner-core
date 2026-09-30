@@ -52,6 +52,7 @@ from plan.services_lifecycle import cancel_plan_event, materialize_plan_event
 from plan.services_projection import (
     ProjectionService,
     build_projection_inputs,
+    calculate_projection,
     capital_requirements,
     debt_annual_payment,
     decision_debt_service_for_year,
@@ -61,7 +62,9 @@ from plan.services_projection import (
     plan_event_payloads,
     planned_contribution_amount,
     serialize_assumptions,
+    sustainable_readiness_month,
     target_capital_for_year,
+    with_retirement,
 )
 from plan.services_scenarios import ScenarioService
 
@@ -858,6 +861,85 @@ class ProjectionInputCorrectnessTests(TestCase):
         year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
 
         self.assertIsNone(year)
+
+    def _mid_horizon_inputs(self):
+        """Capital y ahorro que dejan el retiro sostenible a unos años vista."""
+        year = plan_fiscal_year(self.plan)
+        create_investment(self.user, Decimal("300000.00"))
+        income = create_income(self.user, Decimal("60000.00"))
+        income.fiscal_year = year
+        income.save(update_fields=["fiscal_year"])
+        expense = create_operating_expense(self.user, Decimal("24000.00"))
+        expense.fiscal_year = year
+        expense.save(update_fields=["fiscal_year"])
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        return inputs, serialize_assumptions(get_assumption_set(name="expected"))
+
+    def _holds(self, inputs, assumptions, *, readiness_year, months):
+        metrics = calculate_projection(
+            inputs=with_retirement(inputs, readiness_year),
+            assumptions=assumptions,
+            working_months_in_target_year=months,
+        )
+        floor = inputs.preservation_target_eur or Decimal("0")
+        minimum = min(
+            Decimal(row["productive_capital"])
+            for row in metrics["trajectory"]
+            if row["year"] >= readiness_year
+        )
+        return minimum >= floor if floor > 0 else minimum > 0
+
+    def test_working_the_whole_target_year_matches_retiring_the_next_one(self):
+        """Partir el año objetivo no puede cambiar el resultado anual: trabajarlo
+        entero es lo mismo que retirarse al año siguiente."""
+        inputs, assumptions = self._mid_horizon_inputs()
+        year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+        self.assertIsNotNone(year)
+        self.assertGreater(year, date.today().year + 1)
+
+        annual = calculate_projection(inputs=with_retirement(inputs, year), assumptions=assumptions)
+        split = calculate_projection(
+            inputs=with_retirement(inputs, year - 1),
+            assumptions=assumptions,
+            working_months_in_target_year=12,
+        )
+
+        self.assertEqual(
+            [row["productive_capital"] for row in annual["trajectory"]],
+            [row["productive_capital"] for row in split["trajectory"]],
+        )
+
+    def test_readiness_month_is_the_first_month_that_keeps_retirement_sustainable(self):
+        inputs, assumptions = self._mid_horizon_inputs()
+        year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+
+        month = sustainable_readiness_month(
+            inputs=inputs, assumptions=assumptions, retirement_year=year
+        )
+
+        self.assertIn(month, range(1, 13))
+        self.assertTrue(self._holds(inputs, assumptions, readiness_year=year - 1, months=month))
+        if month > 1:
+            self.assertFalse(
+                self._holds(inputs, assumptions, readiness_year=year - 1, months=month - 1)
+            )
+
+    def test_readiness_month_is_unknown_when_retirement_is_already_sustainable(self):
+        create_investment(self.user, Decimal("5000000.00"))
+        inputs, _, _ = build_projection_inputs(plan=self.plan)
+        assumptions = serialize_assumptions(get_assumption_set(name="expected"))
+        year = earliest_sustainable_retirement_year(inputs=inputs, assumptions=assumptions)
+
+        self.assertIsNone(
+            sustainable_readiness_month(
+                inputs=inputs, assumptions=assumptions, retirement_year=year
+            )
+        )
+        self.assertIsNone(
+            sustainable_readiness_month(
+                inputs=inputs, assumptions=assumptions, retirement_year=None
+            )
+        )
 
     def test_retirement_year_override_drives_projection_without_mutating_plan(self):
         create_investment(self.user, Decimal("500000.00"))

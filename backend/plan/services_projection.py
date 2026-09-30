@@ -590,8 +590,16 @@ def reduce_asset_category(
 
 
 def calculate_projection(
-    *, inputs: ProjectionInputs, assumptions: dict[str, str]
+    *,
+    inputs: ProjectionInputs,
+    assumptions: dict[str, str],
+    working_months_in_target_year: int = 0,
 ) -> dict[str, Any]:
+    """Proyección anual. `working_months_in_target_year` parte el año objetivo en dos:
+    se trabaja (y se aporta) esos meses y se retira el resto. Con 0 el año objetivo es
+    de retiro completo, que es el contrato de siempre; existe para poder decir en qué
+    mes queda listo el capital sin convertir todo el motor a resolución mensual."""
+    working_share = Decimal(working_months_in_target_year) / Decimal("12")
     inflation = Decimal(assumptions["inflation_rate"])
     productive_return = Decimal(assumptions["productive_return_rate"])
     non_productive_return = Decimal(assumptions["non_productive_appreciation_rate"])
@@ -685,6 +693,9 @@ def calculate_projection(
             if year >= target_year
             else Decimal("0")
         )
+        partly_worked = year == target_year and working_share > 0
+        if partly_worked:
+            withdrawals *= Decimal("1") - working_share
         if offset > 0:
             productive = productive * (Decimal("1") + productive_return)
             non_productive_categories_before = (
@@ -723,13 +734,15 @@ def calculate_projection(
         funded_security = Decimal("0")
         funded_productive = Decimal("0")
         automatic_contribution = Decimal("0")
-        if year < target_year:
+        if year < target_year or partly_worked:
             # Todo el superávit libre se asigna a capital. Las aportaciones explícitas
             # de una decisión fijan primero su destino; el resto sigue la ponderación
             # Seguridad/Productivo del supuesto.
             free_cash = free_operating_surplus(
                 inputs=inputs, assumptions=assumptions, year=year, start_year=start_year
             )
+            if partly_worked:
+                free_cash *= working_share
             annual_free_cash = free_cash
             available_cash = free_cash
             if available_cash > 0 and financing_gap > 0:
@@ -776,7 +789,7 @@ def calculate_projection(
                 reduce_asset_category(
                     asset_categories, "investments", productive_before - productive
                 )
-        elif offset > 0:
+        if year >= target_year and offset > 0:
             productive_before = productive
             productive = max(Decimal("0"), productive - withdrawals)
             reduce_asset_category(asset_categories, "investments", productive_before - productive)
@@ -972,6 +985,51 @@ def earliest_sustainable_retirement_year(
         return None
 
     low, high = min(start_year, end_year), end_year
+    while low < high:
+        mid = (low + high) // 2
+        if is_sustainable(mid):
+            high = mid
+        else:
+            low = mid + 1
+    return low
+
+
+def sustainable_readiness_month(
+    *, inputs: ProjectionInputs, assumptions: dict[str, str], retirement_year: int | None
+) -> int | None:
+    """Mes del año anterior a `retirement_year` en que el capital ya queda preparado.
+
+    El titular del plan es un cierre de año porque el motor es anual, pero "lo cumples
+    en 2039" esconde si es en enero o en diciembre. Aquí se parte ese último año
+    trabajado: se busca cuántos meses hay que trabajar en él para que el retiro siga
+    siendo sostenible. 12 equivale al resultado anual; menos, a poder parar antes.
+    Devuelve `None` si ese año ya ha empezado: el año en curso se proyecta con lo que
+    queda de él y no admite partirlo otra vez.
+    """
+    if retirement_year is None:
+        return None
+    readiness_year = retirement_year - 1
+    if readiness_year <= date.today().year:
+        return None
+    floor = inputs.preservation_target_eur or Decimal("0")
+    candidate_inputs = with_retirement(inputs, readiness_year)
+
+    def is_sustainable(months: int) -> bool:
+        metrics = calculate_projection(
+            inputs=candidate_inputs,
+            assumptions=assumptions,
+            working_months_in_target_year=months,
+        )
+        after = [
+            Decimal(row["productive_capital"])
+            for row in metrics["trajectory"]
+            if row["year"] >= readiness_year
+        ]
+        minimum = min(after)
+        return minimum >= floor if floor > 0 else minimum > 0
+
+    # Trabajar un mes más nunca empeora la foto, igual que un año más.
+    low, high = 1, 12
     while low < high:
         mid = (low + high) // 2
         if is_sustainable(mid):
