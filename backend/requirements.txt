@@ -16,7 +16,7 @@ drf-spectacular>=0.30.0
 psycopg[binary]>=3.3.4
 
 # Utils
-python-dotenv>=1.2.3
+python-dotenv>=1.2.4
 msgpack>=1.2.1
 
 # Production server
