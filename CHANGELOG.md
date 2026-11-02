@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.50.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.50.0...moneyplanner-core-v0.50.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **deps:** update follow-redirects security patch ([4899ee8](https://github.com/pablesite/moneyplanner-core/commit/4899ee82c180feb9302d08450d150c9aedc4888a))
+* **plan:** route financing reserves as a series ([3d9a334](https://github.com/pablesite/moneyplanner-core/commit/3d9a3340292cc5394442e11fa2b42c80cf67c9ac))
+* **plan:** route reserves for managed budget lines ([9733409](https://github.com/pablesite/moneyplanner-core/commit/97334098680f42e4a2fd95a165c09a494a0a2b8d))
+
 ## [0.50.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.49.1...moneyplanner-core-v0.50.0) (2026-09-30)
 
 
