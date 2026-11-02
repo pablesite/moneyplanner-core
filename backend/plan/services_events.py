@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -327,17 +328,55 @@ def _decision_impact_event(
     }
 
 
+def _settlement_route_key(entry: AnnualExpenseEntry) -> tuple[int, str, str, str]:
+    return (entry.fiscal_year, entry.category, entry.subcategory, entry.cashflow_role)
+
+
+def _settlement_routes_for_regeneration(entries) -> dict[tuple[int, str, str, str], int]:
+    """Keep explicit routes only when a budget line can be identified unambiguously."""
+    rows = list(entries)
+    counts = Counter(_settlement_route_key(entry) for entry in rows)
+    return {
+        _settlement_route_key(entry): entry.settlement_account_id
+        for entry in rows
+        if counts[_settlement_route_key(entry)] == 1 and entry.settlement_account_id is not None
+    }
+
+
+def _restore_settlement_routes_after_regeneration(
+    entries, routes: dict[tuple[int, str, str, str], int]
+) -> None:
+    from budget.models import SettlementAccount
+    from budget.services_settlement import is_expense_settlement_destination_compatible
+
+    rows = list(entries.select_related("ownership").prefetch_related("ownership__splits"))
+    counts = Counter(_settlement_route_key(entry) for entry in rows)
+    accounts = SettlementAccount.objects.in_bulk(routes.values())
+    for entry in rows:
+        account = accounts.get(routes.get(_settlement_route_key(entry)))
+        if (
+            counts[_settlement_route_key(entry)] == 1
+            and account is not None
+            and account.profile.user_id == entry.user_id
+            and is_expense_settlement_destination_compatible(expense=entry, destination=account)
+        ):
+            entry.settlement_account = account
+            entry.save(update_fields=["settlement_account", "updated_at"])
+
+
 def _replace_planned_decision_financing_entries(
     *, event: PlanEvent, payload: dict[str, Any]
 ) -> int:
     """Mantiene en Presupuesto la cuota que el motor ya proyecta para la decisión."""
     event_group = f"plan_event:{event.id}"
-    AnnualExpenseEntry.objects.filter(
+    existing = AnnualExpenseEntry.objects.filter(
         user=event.plan.user,
         event_group=event_group,
         is_system_generated=True,
         notes=PLANNED_DECISION_FINANCING_NOTE,
-    ).delete()
+    )
+    routes = _settlement_routes_for_regeneration(existing)
+    existing.delete()
 
     principal = Decimal(str(payload.get("new_debt_principal") or "0"))
     term_years = int(str(payload.get("new_debt_term_years") or "0"))
@@ -379,6 +418,15 @@ def _replace_planned_decision_financing_entries(
             notes=PLANNED_DECISION_FINANCING_NOTE,
         )
         created += 1
+    _restore_settlement_routes_after_regeneration(
+        AnnualExpenseEntry.objects.filter(
+            user=event.plan.user,
+            event_group=event_group,
+            is_system_generated=True,
+            notes=PLANNED_DECISION_FINANCING_NOTE,
+        ),
+        routes,
+    )
     return created
 
 
@@ -617,10 +665,15 @@ def _update_scenario_backed_decision(
     )
 
     event_group = f"plan_event:{event.id}"
+    expenses = AnnualExpenseEntry.objects.filter(user=event.plan.user, event_group=event_group)
+    routes = _settlement_routes_for_regeneration(expenses)
     AnnualIncomeEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
-    AnnualExpenseEntry.objects.filter(user=event.plan.user, event_group=event_group).delete()
+    expenses.delete()
     create_budget_entries_for_scenario(scenario=scenario, plan_event=event)
     assign_event_budget_ownership(event=event, ownership=event.ownership)
+    _restore_settlement_routes_after_regeneration(
+        AnnualExpenseEntry.objects.filter(user=event.plan.user, event_group=event_group), routes
+    )
     projection = ProjectionService().recalculate(plan=event.plan)
     return {"event": event, "projection": projection}
 

@@ -10,7 +10,12 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APITestCase
 
-from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.models import (
+    AnnualExpenseEntry,
+    AnnualIncomeEntry,
+    SettlementAccount,
+    SettlementProfile,
+)
 from memberships.models import FamilyMember, Ownership
 from net_worth.models import Asset, InvestmentContributionInterval, Liability
 from portfolio.models import (
@@ -1488,6 +1493,22 @@ class ScenarioApiTests(APITestCase):
         )
         event_id = accept_response.data["event"]["id"]
 
+        profile = SettlementProfile.objects.create(user=self.user, is_enabled=True)
+        asset = Asset.objects.create(user=self.user, name="Reserva", category="cash", amount=0)
+        account = SettlementAccount.objects.create(
+            profile=profile, asset=asset, role=SettlementAccount.Role.OPERATING, currency="EUR"
+        )
+        expense = AnnualExpenseEntry.objects.filter(
+            user=self.user,
+            event_group=f"plan_event:{event_id}",
+            fiscal_year=2028,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        ).first()
+        self.assertIsNotNone(expense)
+        expense.settlement_account = account
+        expense.save(update_fields=["settlement_account"])
+        previous_category, previous_subcategory = expense.category, expense.subcategory
+
         response = self.client.patch(
             reverse("financial-plan-event-planned-decision-detail", args=[event_id]),
             {
@@ -1511,6 +1532,15 @@ class ScenarioApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        regenerated = AnnualExpenseEntry.objects.get(
+            user=self.user,
+            event_group=f"plan_event:{event_id}",
+            fiscal_year=2028,
+            category=previous_category,
+            subcategory=previous_subcategory,
+            cashflow_role=AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+        )
+        self.assertEqual(regenerated.settlement_account_id, account.id)
         event = PlanEvent.objects.get(pk=event_id)
         self.assertEqual(event.ownership, ownership)
         source_event = event.source_scenario.events.get()

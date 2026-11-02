@@ -1,16 +1,24 @@
+from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 
+from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework import serializers, status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from budget.models import AnnualExpenseEntry, AnnualIncomeEntry
+from budget.models import (
+    AnnualExpenseEntry,
+    AnnualIncomeEntry,
+    SettlementAccount,
+    SettlementProfile,
+)
 from budget.serializers import AnnualExpenseEntrySerializer, AnnualIncomeEntrySerializer
+from budget.services_settlement import is_expense_settlement_destination_compatible
 from memberships.models import FamilyMember
 
 from .models import (
@@ -494,14 +502,82 @@ class PlanEventBudgetLinesView(APIView):
         expenses = AnnualExpenseEntry.objects.filter(
             user=request.user, event_group=event_group
         ).order_by("fiscal_year", "id")
+        profile = SettlementProfile.objects.filter(user=request.user, is_enabled=True).first()
+        accounts = list(profile.accounts.select_related("asset").order_by("id")) if profile else []
+        expense_rows = []
+        destinations_by_rule = {}
+        for expense in expenses.select_related("ownership").prefetch_related("ownership__splits"):
+            row = dict(AnnualExpenseEntrySerializer(expense, context={"request": request}).data)
+            editable = bool(profile) and _supports_settlement_destination(expense)
+            row["settlement_editable"] = editable
+            rule = (expense.ownership_id, expense.cashflow_role)
+            if editable and rule not in destinations_by_rule:
+                destinations_by_rule[rule] = [
+                    {"id": account.id, "name": account.asset.name}
+                    for account in accounts
+                    if is_expense_settlement_destination_compatible(
+                        expense=expense, destination=account
+                    )
+                ]
+            row["settlement_destinations"] = destinations_by_rule.get(rule, []) if editable else []
+            expense_rows.append(row)
         return Response(
             {
                 "event": {"id": event.id, "name": event.name},
                 "income": AnnualIncomeEntrySerializer(incomes, many=True).data,
-                "expenses": AnnualExpenseEntrySerializer(expenses, many=True).data,
+                "expenses": expense_rows,
                 "linked": linked_net_worth_impact(event=event),
             }
         )
+
+
+def _supports_settlement_destination(expense: AnnualExpenseEntry) -> bool:
+    return (
+        expense.time_profile != AnnualExpenseEntry.TimeProfile.ONE_OFF
+        and expense.cashflow_role
+        in {
+            AnnualExpenseEntry.CashflowRole.OPERATING,
+            AnnualExpenseEntry.CashflowRole.TEMPORARY_COMMITMENT,
+            AnnualExpenseEntry.CashflowRole.SAVINGS,
+            AnnualExpenseEntry.CashflowRole.INVESTMENT,
+        }
+    )
+
+
+class PlanEventBudgetLineDestinationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def patch(self, request, pk: int, entry_id: int):
+        event = get_object_or_404(
+            PlanEvent.objects.select_for_update(), pk=pk, plan__user=request.user
+        )
+        entry = get_object_or_404(
+            AnnualExpenseEntry.objects.select_for_update(of=("self",)).select_related("ownership"),
+            pk=entry_id,
+            user=request.user,
+            event_group=f"plan_event:{event.id}",
+        )
+        if not isinstance(request.data, Mapping) or set(request.data.keys()) != {
+            "settlement_account_id"
+        }:
+            raise ValidationError({"detail": "Indica únicamente la cuenta destino."})
+        if not _supports_settlement_destination(entry):
+            raise ValidationError({"detail": "Esta partida no admite una cuenta de reserva."})
+        profile = get_object_or_404(SettlementProfile, user=request.user, is_enabled=True)
+        account_id = serializers.IntegerField(min_value=1, allow_null=True).run_validation(
+            request.data["settlement_account_id"]
+        )
+        account = None
+        if account_id is not None:
+            account = get_object_or_404(SettlementAccount, pk=account_id, profile=profile)
+            if not is_expense_settlement_destination_compatible(expense=entry, destination=account):
+                raise ValidationError(
+                    {"settlement_account_id": "La cuenta no es compatible con esta partida."}
+                )
+        entry.settlement_account = account
+        entry.save(update_fields=["settlement_account", "updated_at"])
+        return Response(AnnualExpenseEntrySerializer(entry, context={"request": request}).data)
 
 
 def linked_net_worth_impact(*, event: PlanEvent) -> dict[str, list[dict]]:
