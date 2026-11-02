@@ -332,6 +332,16 @@ def _settlement_route_key(entry: AnnualExpenseEntry) -> tuple[int, str, str, str
     return (entry.fiscal_year, entry.category, entry.subcategory, entry.cashflow_role)
 
 
+def _financing_route_key(entry: AnnualExpenseEntry) -> tuple[str, str, str, int | None, str]:
+    return (
+        entry.category,
+        entry.subcategory,
+        entry.cashflow_role,
+        entry.ownership_id,
+        entry.currency,
+    )
+
+
 def _settlement_routes_for_regeneration(entries) -> dict[tuple[int, str, str, str], int]:
     """Keep explicit routes only when a budget line can be identified unambiguously."""
     rows = list(entries)
@@ -344,16 +354,28 @@ def _settlement_routes_for_regeneration(entries) -> dict[tuple[int, str, str, st
 
 
 def _restore_settlement_routes_after_regeneration(
-    entries, routes: dict[tuple[int, str, str, str], int]
+    entries,
+    routes: dict[tuple[int, str, str, str], int],
+    financing_default: tuple[tuple[str, str, str, int | None, str], int] | None = None,
 ) -> None:
     from budget.models import SettlementAccount
     from budget.services_settlement import is_expense_settlement_destination_compatible
 
     rows = list(entries.select_related("ownership").prefetch_related("ownership__splits"))
     counts = Counter(_settlement_route_key(entry) for entry in rows)
-    accounts = SettlementAccount.objects.in_bulk(routes.values())
+    account_ids = set(routes.values())
+    if financing_default:
+        account_ids.add(financing_default[1])
+    accounts = SettlementAccount.objects.in_bulk(account_ids)
     for entry in rows:
-        account = accounts.get(routes.get(_settlement_route_key(entry)))
+        account_id = routes.get(_settlement_route_key(entry))
+        if (
+            account_id is None
+            and financing_default
+            and _financing_route_key(entry) == financing_default[0]
+        ):
+            account_id = financing_default[1]
+        account = accounts.get(account_id)
         if (
             counts[_settlement_route_key(entry)] == 1
             and account is not None
@@ -375,7 +397,16 @@ def _replace_planned_decision_financing_entries(
         is_system_generated=True,
         notes=PLANNED_DECISION_FINANCING_NOTE,
     )
-    routes = _settlement_routes_for_regeneration(existing)
+    previous = list(existing)
+    routes = _settlement_routes_for_regeneration(previous)
+    signatures = {_financing_route_key(entry) for entry in previous}
+    account_ids = {entry.settlement_account_id for entry in previous}
+    years = {entry.fiscal_year for entry in previous}
+    financing_default = None
+    if previous and len(signatures) == len(account_ids) == 1 and len(years) == len(previous):
+        account_id = next(iter(account_ids))
+        if account_id is not None:
+            financing_default = (next(iter(signatures)), account_id)
     existing.delete()
 
     principal = Decimal(str(payload.get("new_debt_principal") or "0"))
@@ -426,6 +457,7 @@ def _replace_planned_decision_financing_entries(
             notes=PLANNED_DECISION_FINANCING_NOTE,
         ),
         routes,
+        financing_default,
     )
     return created
 

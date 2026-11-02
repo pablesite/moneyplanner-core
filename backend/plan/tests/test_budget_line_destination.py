@@ -156,3 +156,94 @@ class PlanBudgetLineDestinationTests(APITestCase):
             user=self.user, event_group=f"plan_event:{self.event.id}", fiscal_year=2026
         )
         self.assertEqual(regenerated.settlement_account_id, self.account.id)
+
+    def test_selects_once_for_all_financing_years_and_new_years(self):
+        entries = AnnualExpenseEntry.objects.filter(
+            user=self.user, event_group=f"plan_event:{self.event.id}"
+        )
+        original = list(entries.values_list("id", "fiscal_year", "amount_annual"))
+        other = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Otra partida",
+            category="consumption_expenses",
+            subcategory="other_consumption_expenses",
+            fiscal_year=2026,
+            amount_annual=100,
+            event_group=f"plan_event:{self.event.id}",
+        )
+        read = self.client.get(
+            reverse("financial-plan-event-budget-lines", kwargs={"pk": self.event.id})
+        )
+        series_rows = [row for row in read.data["expenses"] if row["id"] != other.id]
+        self.assertEqual(len({row["settlement_series_id"] for row in series_rows}), 1)
+        self.assertEqual(series_rows[0]["settlement_series_id"], self.entry.id)
+        response = self.client.patch(
+            self.url,
+            {"settlement_account_id": self.account.id, "apply_to_series": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.data["updated_entry_ids"]), {row[0] for row in original})
+        self.assertEqual(
+            list(entries.exclude(pk=other.pk).values_list("id", "fiscal_year", "amount_annual")),
+            original,
+        )
+        self.assertEqual(
+            entries.exclude(pk=other.pk).filter(settlement_account=self.account).count(),
+            len(original),
+        )
+        other.refresh_from_db()
+        self.assertIsNone(other.settlement_account_id)
+
+        self.payload["new_debt_term_years"] = 3
+        _replace_planned_decision_financing_entries(event=self.event, payload=self.payload)
+        regenerated = AnnualExpenseEntry.objects.filter(
+            user=self.user, event_group=f"plan_event:{self.event.id}", is_system_generated=True
+        )
+        self.assertGreater(regenerated.count(), len(original))
+        self.assertEqual(
+            regenerated.filter(settlement_account=self.account).count(), regenerated.count()
+        )
+
+    def test_ambiguous_financing_series_is_not_bulk_updated(self):
+        duplicate = AnnualExpenseEntry.objects.get(pk=self.entry.pk)
+        duplicate.pk = None
+        duplicate.save()
+        response = self.client.patch(
+            self.url,
+            {"settlement_account_id": self.account.id, "apply_to_series": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(
+            AnnualExpenseEntry.objects.filter(
+                user=self.user,
+                event_group=f"plan_event:{self.event.id}",
+                settlement_account__isnull=False,
+            ).exists()
+        )
+
+    def test_extension_does_not_infer_a_destination_from_mixed_years(self):
+        rows = AnnualExpenseEntry.objects.filter(
+            user=self.user, event_group=f"plan_event:{self.event.id}"
+        ).order_by("fiscal_year")
+        second_account = self.profile.accounts.exclude(id=self.account.id).get()
+        first, second = list(rows[:2])
+        first.settlement_account = self.account
+        second.settlement_account = second_account
+        first.save(update_fields=["settlement_account"])
+        second.save(update_fields=["settlement_account"])
+        self.payload["new_debt_term_years"] = 3
+
+        _replace_planned_decision_financing_entries(event=self.event, payload=self.payload)
+
+        regenerated = AnnualExpenseEntry.objects.filter(
+            user=self.user, event_group=f"plan_event:{self.event.id}"
+        )
+        self.assertEqual(
+            regenerated.get(fiscal_year=first.fiscal_year).settlement_account_id, self.account.id
+        )
+        self.assertEqual(
+            regenerated.get(fiscal_year=second.fiscal_year).settlement_account_id, second_account.id
+        )
+        self.assertIsNone(regenerated.order_by("-fiscal_year").first().settlement_account_id)

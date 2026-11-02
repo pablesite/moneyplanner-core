@@ -1,7 +1,8 @@
 # Project Status — Core
 
-Plan-managed recurring expenses can set a compatible settlement destination from Mi Plan. Explicit
-destinations survive budget-line regeneration when the successor is unambiguous and compatible.
+Plan-managed recurring expenses can set a compatible settlement destination from Mi Plan. A single
+selection covers every year of an unambiguous financing series, including new years after an extension;
+explicit destinations survive budget-line regeneration when the successor is unambiguous and compatible.
 
 Current feature status by area. Update this file whenever functionality status changes.
 

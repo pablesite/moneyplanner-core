@@ -1,3 +1,4 @@
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
 
@@ -51,6 +52,7 @@ from .services_classification import AssetClassificationService
 from .services_findings import FindingService
 from .services_foundations import FoundationService
 from .services_events import (
+    PLANNED_DECISION_FINANCING_NOTE,
     close_plan_event,
     register_occurred_event,
     register_planned_decision,
@@ -504,12 +506,15 @@ class PlanEventBudgetLinesView(APIView):
         ).order_by("fiscal_year", "id")
         profile = SettlementProfile.objects.filter(user=request.user, is_enabled=True).first()
         accounts = list(profile.accounts.select_related("asset").order_by("id")) if profile else []
+        expenses = list(expenses.select_related("ownership").prefetch_related("ownership__splits"))
+        series = _financing_series(expenses)
         expense_rows = []
         destinations_by_rule = {}
-        for expense in expenses.select_related("ownership").prefetch_related("ownership__splits"):
+        for expense in expenses:
             row = dict(AnnualExpenseEntrySerializer(expense, context={"request": request}).data)
             editable = bool(profile) and _supports_settlement_destination(expense)
             row["settlement_editable"] = editable
+            row["settlement_series_id"] = series.get(expense.id) if editable else None
             rule = (expense.ownership_id, expense.cashflow_role)
             if editable and rule not in destinations_by_rule:
                 destinations_by_rule[rule] = [
@@ -544,6 +549,34 @@ def _supports_settlement_destination(expense: AnnualExpenseEntry) -> bool:
     )
 
 
+def _financing_series(expenses: list[AnnualExpenseEntry]) -> dict[int, int]:
+    """Identify the yearly installments of the same generated financing line."""
+    groups = defaultdict(list)
+    for entry in expenses:
+        if (
+            entry.is_system_generated
+            and entry.notes == PLANNED_DECISION_FINANCING_NOTE
+            and _supports_settlement_destination(entry)
+        ):
+            key = (
+                entry.name,
+                entry.category,
+                entry.subcategory,
+                entry.cashflow_role,
+                entry.ownership_id,
+                entry.currency,
+            )
+            groups[key].append(entry)
+    result = {}
+    for rows in groups.values():
+        years = Counter(row.fiscal_year for row in rows)
+        if len(rows) < 2 or any(count != 1 for count in years.values()):
+            continue
+        first_id = min(rows, key=lambda row: (row.fiscal_year, row.id)).id
+        result.update({row.id: first_id for row in rows})
+    return result
+
+
 class PlanEventBudgetLineDestinationView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -558,26 +591,56 @@ class PlanEventBudgetLineDestinationView(APIView):
             user=request.user,
             event_group=f"plan_event:{event.id}",
         )
-        if not isinstance(request.data, Mapping) or set(request.data.keys()) != {
-            "settlement_account_id"
-        }:
-            raise ValidationError({"detail": "Indica únicamente la cuenta destino."})
+        if (
+            not isinstance(request.data, Mapping)
+            or "settlement_account_id" not in request.data
+            or set(request.data.keys()) - {"settlement_account_id", "apply_to_series"}
+        ):
+            raise ValidationError(
+                {"detail": "Indica la cuenta destino y el alcance de la reserva."}
+            )
         if not _supports_settlement_destination(entry):
             raise ValidationError({"detail": "Esta partida no admite una cuenta de reserva."})
         profile = get_object_or_404(SettlementProfile, user=request.user, is_enabled=True)
         account_id = serializers.IntegerField(min_value=1, allow_null=True).run_validation(
             request.data["settlement_account_id"]
         )
+        apply_to_series = serializers.BooleanField().run_validation(
+            request.data.get("apply_to_series", False)
+        )
+        entries = [entry]
+        if apply_to_series:
+            candidates = list(
+                AnnualExpenseEntry.objects.select_for_update(of=("self",))
+                .select_related("ownership")
+                .prefetch_related("ownership__splits")
+                .filter(user=request.user, event_group=f"plan_event:{event.id}")
+                .order_by("fiscal_year", "id")
+            )
+            series = _financing_series(candidates)
+            series_id = series.get(entry.id)
+            if series_id is None:
+                raise ValidationError(
+                    {"apply_to_series": "La partida no tiene una serie inequívoca."}
+                )
+            entries = [row for row in candidates if series.get(row.id) == series_id]
         account = None
         if account_id is not None:
             account = get_object_or_404(SettlementAccount, pk=account_id, profile=profile)
-            if not is_expense_settlement_destination_compatible(expense=entry, destination=account):
+            if any(
+                not is_expense_settlement_destination_compatible(expense=row, destination=account)
+                for row in entries
+            ):
                 raise ValidationError(
                     {"settlement_account_id": "La cuenta no es compatible con esta partida."}
                 )
+        for row in entries:
+            row.settlement_account = account
+            row.save(update_fields=["settlement_account", "updated_at"])
         entry.settlement_account = account
-        entry.save(update_fields=["settlement_account", "updated_at"])
-        return Response(AnnualExpenseEntrySerializer(entry, context={"request": request}).data)
+        data = dict(AnnualExpenseEntrySerializer(entry, context={"request": request}).data)
+        data["updated_entry_ids"] = [row.id for row in entries]
+        return Response(data)
 
 
 def linked_net_worth_impact(*, event: PlanEvent) -> dict[str, list[dict]]:
