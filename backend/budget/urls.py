@@ -23,6 +23,7 @@ from .views_settlement import (
     SettlementActivateView,
     SettlementConfigurationView,
     SettlementDisableView,
+    SettlementOperatingAccountView,
     SettlementReadinessView,
     SettlementRebaselineView,
     SettlementReserveAdjustmentView,
@@ -53,6 +54,11 @@ urlpatterns = [
         "settlement/accounts/",
         SettlementAccountAddView.as_view(),
         name="settlement-account-add",
+    ),
+    path(
+        "settlement/operating-account/",
+        SettlementOperatingAccountView.as_view(),
+        name="settlement-operating-account",
     ),
     path(
         "settlement/readiness/",

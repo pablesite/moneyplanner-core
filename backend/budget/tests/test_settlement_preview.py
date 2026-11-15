@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APITestCase
 
@@ -19,7 +20,10 @@ from budget.models import (
     SettlementWalletNormalization,
 )
 from budget.services_monthly_close import finalize_monthly_close, reopen_monthly_close
-from budget.services_settlement import add_settlement_account
+from budget.services_settlement import (
+    add_settlement_account,
+    replace_settlement_operating_account,
+)
 from budget.services_settlement_execution import sweep_personal_wallets
 from budget.services_settlement_preview import (
     _allocate,
@@ -1125,6 +1129,76 @@ class SettlementPreviewTests(APITestCase):
             [share["amount"] for share in row["closing_by_member"]], ["20.00", "20.00"]
         )
         self.assertEqual(result["reconciliation"]["economic_total"], "1340.00")
+
+    def test_replacing_the_operating_account_moves_the_reserve_and_keeps_the_old_one(self):
+        entry = self._ordinary_reserve()
+        march = MonthlyClose.objects.create(user=self.user, fiscal_year=2026, month=3)
+        finalize_monthly_close(monthly_close=march, user=self.user)
+        frozen = SettlementSnapshot.objects.get(monthly_close=march).account_balances
+        new, new_ledger = self._account_asset("Nueva compartida", Decimal("0"), self.shared)
+        new.tracking_mode = Asset.TrackingMode.ACCOUNTING
+        new.save(update_fields=["tracking_mode"])
+        self._transfer(
+            amount=Decimal("100"),
+            source=self.operating_ledger,
+            destination=new_ledger,
+            booking_date=date(2026, 4, 10),
+        )
+        self.operating.amount = Decimal("900")
+        self.operating.save(update_fields=["amount"])
+
+        profile, rerouted = replace_settlement_operating_account(user=self.user, asset_id=new.id)
+        result = compute_monthly_close_settlement(user=self.user, fiscal_year=2026, month=4)
+
+        self.assertEqual(rerouted, 1)
+        roles = {account.asset_id: account.role for account in profile.accounts.all()}
+        self.assertEqual(roles[new.id], SettlementAccount.Role.OPERATING)
+        self.assertEqual(roles[self.operating.id], SettlementAccount.Role.ALLOCATION_DESTINATION)
+        self.assertEqual(result["status"], "ready", result["quality"])
+        new_config = profile.accounts.get(asset=new)
+        reserve = next(row for row in result["reserves"] if row["entry_id"] == entry.id)
+        self.assertEqual(reserve["settlement_account_id"], new_config.id)
+        old_row = next(row for row in result["accounts"] if row["name"] == "Compartida")
+        self.assertEqual(old_row["observed_close"], "900.00")
+        self.assertEqual(result["reconciliation"]["economic_total"], "1300.00")
+        self.assertEqual(
+            SettlementSnapshot.objects.get(monthly_close=march).account_balances, frozen
+        )
+
+    def test_an_allocation_destination_can_become_the_operating_account(self):
+        fund, _fund_ledger = self._account_asset("Fondo 50/50", Decimal("0"), self.shared)
+        fund_config = self._settlement_account(fund, SettlementAccount.Role.ALLOCATION_DESTINATION)
+
+        replace_settlement_operating_account(user=self.user, asset_id=fund.id)
+
+        fund_config.refresh_from_db()
+        self.operating_config.refresh_from_db()
+        self.assertEqual(fund_config.role, SettlementAccount.Role.OPERATING)
+        self.assertEqual(self.operating_config.role, SettlementAccount.Role.ALLOCATION_DESTINATION)
+        self.assertEqual(
+            self.profile.accounts.filter(role=SettlementAccount.Role.OPERATING).count(), 1
+        )
+
+    def test_operating_account_cannot_be_a_personal_destination_or_the_current_one(self):
+        for asset in (self.personal_a, self.operating):
+            with self.assertRaises(ValidationError):
+                replace_settlement_operating_account(user=self.user, asset_id=asset.id)
+        self.operating_config.refresh_from_db()
+        self.assertEqual(self.operating_config.role, SettlementAccount.Role.OPERATING)
+
+    def test_operating_account_endpoint_reports_rerouted_budget_rows(self):
+        self._ordinary_reserve()
+        new, _new_ledger = self._account_asset("Nueva compartida", Decimal("0"), self.shared)
+        self.client.force_authenticate(self.user)
+
+        response = self.client.post(
+            reverse("settlement-operating-account"), {"asset_id": new.id}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["rerouted_expense_count"], 1)
+        operating = [row for row in response.data["accounts"] if row["role"] == "operating"]
+        self.assertEqual([row["asset_id"] for row in operating], [new.id])
 
     def _wallet(self, name, ownership):
         asset, ledger = self._account_asset(name, Decimal("0"), ownership)

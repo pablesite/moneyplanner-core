@@ -46,6 +46,12 @@ Define the Core-owned architecture for daily movements and the new `accounting` 
 9. `settlement_idempotency_key` is unique per user when present. `settlement_action` distinguishes
    application, reconciliation and reversal, while `settlement_amount` preserves the amount applied
    by each linked movement. A reversal adds the opposite transfer and never deletes history.
+10. Once the opening baseline exists the configuration is historical, but the operating account can
+    be replaced. The new account joins from the activation baseline (or the last close, like any late
+    account) or changes role if it already was an allocation destination; the previous one remains as
+    an allocation destination, so its balance keeps counting. Budget rows routed to the previous
+    account move to the new one. Finalized snapshots stay frozen, so only open and future closes read
+    the new operating account.
 
 ## Problem to solve
 Core already has useful but separate execution layers:

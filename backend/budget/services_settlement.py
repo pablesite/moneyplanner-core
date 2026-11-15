@@ -1031,32 +1031,127 @@ def add_settlement_account(*, user, asset_id: int) -> SettlementProfile:
     never changes how the operating reserve or the personal destinations are routed.
     """
 
+    profile = _lock_activated_settlement_profile(user=user)
+    asset = _validated_liquidity_asset(user=user, profile=profile, asset_id=asset_id)
+    if asset.id in _participating_asset_ids(user=user, profile=profile):
+        raise ValidationError({"asset_id": f"{asset.name} ya participa en la liquidacion."})
+    _join_settlement_account(
+        user=user,
+        profile=profile,
+        asset=asset,
+        role=cast(str, SettlementAccount.Role.ALLOCATION_DESTINATION),
+    )
+    return profile
+
+
+@transaction.atomic
+def replace_settlement_operating_account(
+    *, user, asset_id: int, previous_account_id: int | None = None
+) -> tuple[SettlementProfile, int]:
+    """Make another liquidity account the operating one of an active settlement.
+
+    The previous operating account stays in the settlement as an allocation destination, so its
+    balance and history keep counting. The new one joins with its opening balance if it was not
+    participating yet, or changes role if it already was an allocation destination. Budget rows
+    that reserved in the previous operating account move to the new one. Finalized snapshots are
+    frozen and do not change. Returns the profile and how many budget rows were re-routed.
+    """
+
+    profile = _lock_activated_settlement_profile(user=user)
+    operating_accounts = list(profile.accounts.filter(role=SettlementAccount.Role.OPERATING))
+    if previous_account_id is not None:
+        previous = next(
+            (account for account in operating_accounts if account.id == previous_account_id),
+            None,
+        )
+        if previous is None:
+            raise ValidationError(
+                {"previous_account_id": "Esa cuenta no es una cuenta operativa de la liquidacion."}
+            )
+    elif len(operating_accounts) == 1:
+        previous = operating_accounts[0]
+    else:
+        raise ValidationError({"previous_account_id": "Indica que cuenta operativa se sustituye."})
+
+    asset = _validated_liquidity_asset(user=user, profile=profile, asset_id=asset_id)
+    current = profile.accounts.filter(asset=asset).first()
+    if current is not None:
+        if current.role == SettlementAccount.Role.OPERATING:
+            raise ValidationError({"asset_id": f"{asset.name} ya es una cuenta operativa."})
+        if current.role != SettlementAccount.Role.ALLOCATION_DESTINATION:
+            raise ValidationError(
+                {
+                    "asset_id": (
+                        f"{asset.name} es un destino personal o un monedero y no puede ser "
+                        "la cuenta operativa."
+                    )
+                }
+            )
+        current.role = SettlementAccount.Role.OPERATING
+        current.save(update_fields=["role", "updated_at"])
+        replacement = current
+    elif asset.id in _participating_asset_ids(user=user, profile=profile):
+        raise ValidationError(
+            {"asset_id": f"{asset.name} ya participa en la liquidacion con otro papel."}
+        )
+    else:
+        replacement = _join_settlement_account(
+            user=user,
+            profile=profile,
+            asset=asset,
+            role=cast(str, SettlementAccount.Role.OPERATING),
+        )
+
+    previous.role = SettlementAccount.Role.ALLOCATION_DESTINATION
+    previous.save(update_fields=["role", "updated_at"])
+    rerouted = AnnualExpenseEntry.objects.filter(user=user, settlement_account=previous).update(
+        settlement_account=replacement
+    )
+    profile.readiness_status = SettlementProfile.ReadinessStatus.NOT_CHECKED
+    profile.readiness_checked_at = None
+    profile.save(update_fields=["readiness_status", "readiness_checked_at", "updated_at"])
+    return profile, rerouted
+
+
+def _lock_activated_settlement_profile(*, user) -> SettlementProfile:
     existing_profile = get_or_create_settlement_profile(user=user)
     profile = SettlementProfile.objects.select_for_update().get(pk=existing_profile.pk)
     if profile.activation_date is None or not profile.opening_balances.exists():
         raise ValidationError(
             {"detail": "La liquidacion aun no tiene saldo de apertura: usa la configuracion."}
         )
+    return profile
+
+
+def _validated_liquidity_asset(*, user, profile: SettlementProfile, asset_id: int) -> Asset:
     asset = Asset.objects.filter(user=user, id=asset_id).first()
     if asset is None:
         raise ValidationError({"asset_id": "La cuenta no pertenece al usuario."})
     if asset.category != Asset.Category.CASH or asset.subcategory == Asset.Subcategory.WALLET:
         raise ValidationError({"asset_id": f"{asset.name} no es una cuenta de liquidez."})
-    currency = asset.currency.strip().upper()
-    if currency != profile.base_currency:
+    if asset.currency.strip().upper() != profile.base_currency:
         raise ValidationError(
             {"asset_id": f"{asset.name} no usa la moneda base de la liquidacion."}
         )
     if _ownership_for_asset(user=user, asset_id=asset.id) is None:
         raise ValidationError({"asset_id": f"Asigna titularidad a {asset.name}."})
-    if asset.id in _participating_asset_ids(user=user, profile=profile):
-        raise ValidationError({"asset_id": f"{asset.name} ya participa en la liquidacion."})
+    return asset
 
+
+def _join_settlement_account(
+    *, user, profile: SettlementProfile, asset: Asset, role: str
+) -> SettlementAccount:
+    """Count an account from the activation baseline, as if it had been configured then."""
+
+    if profile.activation_date is None:
+        raise ValidationError(
+            {"detail": "La liquidacion aun no tiene saldo de apertura: usa la configuracion."}
+        )
     account = SettlementAccount.objects.create(
         profile=profile,
         asset=asset,
-        role=SettlementAccount.Role.ALLOCATION_DESTINATION,
-        currency=currency,
+        role=role,
+        currency=asset.currency.strip().upper(),
     )
     _capture_account_opening(
         user=user,
@@ -1065,4 +1160,4 @@ def add_settlement_account(*, user, asset_id: int) -> SettlementProfile:
         baseline_date=profile.activation_date,
         start_date=profile.activation_date + timedelta(days=1),
     )
-    return profile
+    return account

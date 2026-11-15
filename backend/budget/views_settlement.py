@@ -11,6 +11,7 @@ from .serializers_settlement import (
     SettlementAccountAddSerializer,
     SettlementActivationSerializer,
     SettlementConfigurationWriteSerializer,
+    SettlementOperatingAccountReplaceSerializer,
     SettlementRebaselineSerializer,
     SettlementReserveAdjustmentSerializer,
 )
@@ -23,6 +24,7 @@ from .services_settlement import (
     get_or_create_settlement_profile,
     joinable_settlement_asset_ids,
     replace_settlement_configuration,
+    replace_settlement_operating_account,
     rebaseline_settlement_profile,
     set_operating_reserve_adjustment,
 )
@@ -135,6 +137,22 @@ class SettlementAccountAddView(APIView):
             asset_id=serializer.validated_data["asset_id"],
         )
         return Response(serialize_settlement_configuration(profile))
+
+
+class SettlementOperatingAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SettlementOperatingAccountReplaceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile, rerouted = replace_settlement_operating_account(
+            user=request.user,
+            asset_id=serializer.validated_data["asset_id"],
+            previous_account_id=serializer.validated_data.get("previous_account_id"),
+        )
+        return Response(
+            {**serialize_settlement_configuration(profile), "rerouted_expense_count": rerouted}
+        )
 
 
 class SettlementReserveAdjustmentView(APIView):
