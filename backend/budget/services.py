@@ -175,22 +175,21 @@ def _effective_annual_amount_for_term_entry(
     amount: Decimal,
     amount_input_period: str,
     time_profile: str,
-    term_start_month: int | None,
-    term_end_year: int | None,
-    term_end_month: int | None,
-    fiscal_year: int,
+    active_months: int,
 ) -> Decimal:
+    """Amount a row plans inside one fiscal year.
+
+    A monthly term row stores its monthly input times twelve, so in a year where the term
+    is only active for some months (it starts late, ends early, or both) it plans just
+    those months. An annual input is already the amount for its active months.
+    """
     if amount <= 0:
         return Decimal("0.00")
     if amount_input_period != AnnualExpenseEntry.AmountInputPeriod.MONTHLY:
         return amount
     if time_profile != AnnualExpenseEntry.TimeProfile.TERM_RECURRENT:
         return amount
-    if term_end_year is not None and term_end_year != fiscal_year:
-        return amount
-    start_month = max(1, min(12, int(term_start_month or 1)))
-    end_month = max(start_month, min(12, int(term_end_month or 12)))
-    months = max(1, end_month - start_month + 1)
+    months = max(1, min(12, active_months))
     return _round_money((amount * Decimal(months)) / Decimal("12"))
 
 
@@ -567,27 +566,8 @@ def effective_annual_expense_entries(*, user, fiscal_year: int):
 def planned_expense_monthly_distribution(
     *, entry: AnnualExpenseEntry, fiscal_year: int
 ) -> dict[int, Decimal]:
-    amount = _effective_annual_amount_for_term_entry(
-        amount=Decimal(entry.amount_annual or 0),
-        amount_input_period=entry.amount_input_period,
-        time_profile=entry.time_profile,
-        term_start_month=entry.term_start_month,
-        term_end_year=entry.term_end_year,
-        term_end_month=entry.term_end_month,
-        fiscal_year=fiscal_year,
-    )
-    if amount <= 0:
-        return {}
     if not expense_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
         return {}
-    if (
-        entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
-        or entry.expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
-    ):
-        if not entry.target_month:
-            return {}
-        return {int(entry.target_month): _round_money(amount)}
-
     start_month = 1
     if (
         entry.time_profile == AnnualExpenseEntry.TimeProfile.TERM_RECURRENT
@@ -602,6 +582,22 @@ def planned_expense_monthly_distribution(
         end_month = entry.term_end_month or 12
     end_month = max(start_month, end_month)
     active_months = end_month - start_month + 1
+    amount = _effective_annual_amount_for_term_entry(
+        amount=Decimal(entry.amount_annual or 0),
+        amount_input_period=entry.amount_input_period,
+        time_profile=entry.time_profile,
+        active_months=active_months,
+    )
+    if amount <= 0:
+        return {}
+    if (
+        entry.time_profile == AnnualExpenseEntry.TimeProfile.ONE_OFF
+        or entry.expense_type == AnnualExpenseEntry.ExpenseType.ONE_OFF
+    ):
+        if not entry.target_month:
+            return {}
+        return {int(entry.target_month): _round_money(amount)}
+
     base = _round_money(amount / Decimal(active_months))
     distribution = {month: base for month in range(start_month, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))
@@ -895,24 +891,8 @@ def effective_annual_income_entries(*, user, fiscal_year: int):
 def planned_income_monthly_distribution(
     *, entry: AnnualIncomeEntry, fiscal_year: int
 ) -> dict[int, Decimal]:
-    amount = _effective_annual_amount_for_term_entry(
-        amount=Decimal(entry.amount_annual or 0),
-        amount_input_period=entry.amount_input_period,
-        time_profile=entry.time_profile,
-        term_start_month=entry.term_start_month,
-        term_end_year=entry.term_end_year,
-        term_end_month=entry.term_end_month,
-        fiscal_year=fiscal_year,
-    )
-    if amount <= 0:
-        return {}
     if not income_entry_applies_to_fiscal_year(entry=entry, fiscal_year=fiscal_year):
         return {}
-    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
-        if not entry.target_month:
-            return {}
-        return {int(entry.target_month): _round_money(amount)}
-
     start_month = 1
     if (
         entry.time_profile == AnnualIncomeEntry.TimeProfile.TERM_RECURRENT
@@ -925,11 +905,23 @@ def planned_income_monthly_distribution(
         and entry.term_end_year == fiscal_year
     ):
         end_month = entry.term_end_month or 12
+    end_month = max(start_month, end_month)
+    active_months = end_month - start_month + 1
+    amount = _effective_annual_amount_for_term_entry(
+        amount=Decimal(entry.amount_annual or 0),
+        amount_input_period=entry.amount_input_period,
+        time_profile=entry.time_profile,
+        active_months=active_months,
+    )
+    if amount <= 0:
+        return {}
+    if entry.time_profile == AnnualIncomeEntry.TimeProfile.ONE_OFF:
+        if not entry.target_month:
+            return {}
+        return {int(entry.target_month): _round_money(amount)}
     if entry.target_month and start_month <= int(entry.target_month) <= end_month:
         return {int(entry.target_month): _round_money(amount)}
 
-    end_month = max(start_month, end_month)
-    active_months = end_month - start_month + 1
     base = _round_money(amount / Decimal(active_months))
     distribution = {month: base for month in range(start_month, end_month + 1)}
     total = sum(distribution.values(), Decimal("0.00"))

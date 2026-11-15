@@ -307,6 +307,57 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(distribution[3], Decimal("300.00"))
         self.assertEqual(sum(distribution.values()), Decimal("1200.00"))
 
+    def test_planned_expense_distribution_prorates_each_year_of_a_multi_year_monthly_term(self):
+        # 36 cuotas de 36,99 € de noviembre de 2026 a octubre de 2029. El primer año solo
+        # planifica noviembre y diciembre; el último, de enero a octubre.
+        renting = AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Renting móvil",
+            category="tangible_assets",
+            subcategory="technology_devices",
+            expense_type=AnnualExpenseEntry.ExpenseType.RECURRENT,
+            time_profile=AnnualExpenseEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=11,
+            term_end_month=10,
+            term_end_year=2029,
+            amount_input_period=AnnualExpenseEntry.AmountInputPeriod.MONTHLY,
+            amount_annual=Decimal("443.88"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        by_year = {
+            year: planned_expense_monthly_distribution(entry=renting, fiscal_year=year)
+            for year in range(2026, 2031)
+        }
+        self.assertEqual(by_year[2026], {11: Decimal("36.99"), 12: Decimal("36.99")})
+        self.assertEqual(by_year[2027], {month: Decimal("36.99") for month in range(1, 13)})
+        self.assertEqual(by_year[2029], {month: Decimal("36.99") for month in range(1, 11)})
+        self.assertEqual(by_year[2030], {})
+        total = sum((sum(d.values(), Decimal("0")) for d in by_year.values()), Decimal("0"))
+        self.assertEqual(total, Decimal("1331.64"))
+
+    def test_planned_income_distribution_prorates_each_year_of_a_multi_year_monthly_term(self):
+        contract = AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Contrato temporal",
+            category="business",
+            subcategory="self_employed_services",
+            time_profile=AnnualIncomeEntry.TimeProfile.TERM_RECURRENT,
+            term_start_month=9,
+            term_end_month=3,
+            term_end_year=2027,
+            amount_input_period=AnnualIncomeEntry.AmountInputPeriod.MONTHLY,
+            amount_annual=Decimal("12000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        first = planned_income_monthly_distribution(entry=contract, fiscal_year=2026)
+        last = planned_income_monthly_distribution(entry=contract, fiscal_year=2027)
+        self.assertEqual(first, {month: Decimal("1000.00") for month in range(9, 13)})
+        self.assertEqual(last, {month: Decimal("1000.00") for month in range(1, 4)})
+
     def test_planned_expense_distribution_uses_expense_type_for_legacy_one_off_rows(self):
         legacy_one_off = AnnualExpenseEntry.objects.create(
             user=self.user,
