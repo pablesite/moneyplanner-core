@@ -1,9 +1,11 @@
 from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .checkins import resolve_confirmed_at
 from .models import (
@@ -25,11 +27,20 @@ from .serializers import (
     AnnualIncomeMonthlyCheckinSerializer,
 )
 from .services import (
+    budget_fiscal_years,
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
     effective_annual_expense_entries,
     effective_annual_income_entries,
 )
+
+
+class BudgetYearsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        years = budget_fiscal_years(user=request.user, current_year=timezone.localdate().year)
+        return Response({"years": years})
 
 
 def _assert_monthly_close_not_finalized(*, user, fiscal_year: int, month: int) -> None:

@@ -17,6 +17,7 @@ from net_worth.models import Asset, Liability
 from budget.services import (
     EXPENSE_TAXONOMY,
     INCOME_TAXONOMY,
+    budget_fiscal_years,
     build_expense_monthly_plan_vs_executed_summary,
     build_income_monthly_plan_vs_executed_summary,
     expense_entry_applies_to_fiscal_year,
@@ -336,6 +337,35 @@ class BudgetServicesTests(TestCase):
         self.assertEqual(by_year[2030], {})
         total = sum((sum(d.values(), Decimal("0")) for d in by_year.values()), Decimal("0"))
         self.assertEqual(total, Decimal("1331.64"))
+
+    def test_budget_fiscal_years_span_every_row_and_term_end(self):
+        self.assertEqual(budget_fiscal_years(user=self.user, current_year=2026), [2027, 2026, 2025])
+        AnnualExpenseEntry.objects.create(
+            user=self.user,
+            name="Hipoteca 2016",
+            category="real_estate_assets",
+            subcategory="mortgage_principal",
+            amount_annual=Decimal("3000.00"),
+            fiscal_year=2016,
+            currency="EUR",
+        )
+        AnnualIncomeEntry.objects.create(
+            user=self.user,
+            name="Contrato hasta 2029",
+            category="business",
+            subcategory="self_employed_services",
+            time_profile=AnnualIncomeEntry.TimeProfile.TERM_RECURRENT,
+            term_end_year=2029,
+            amount_annual=Decimal("1000.00"),
+            fiscal_year=2026,
+            currency="EUR",
+        )
+
+        years = budget_fiscal_years(user=self.user, current_year=2026)
+
+        self.assertEqual(years[0], 2029)
+        self.assertEqual(years[-1], 2016)
+        self.assertEqual(len(years), 14)
 
     def test_planned_income_distribution_prorates_each_year_of_a_multi_year_monthly_term(self):
         contract = AnnualIncomeEntry.objects.create(

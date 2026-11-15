@@ -6,6 +6,7 @@ from .views import (
     AnnualExpenseMonthlyCheckinViewSet,
     AnnualIncomeEntryViewSet,
     AnnualIncomeMonthlyCheckinViewSet,
+    BudgetYearsView,
 )
 from .views_monthly_close import (
     MonthlyCloseFinalizeView,
@@ -45,6 +46,7 @@ router.register(
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("years/", BudgetYearsView.as_view(), name="budget-years"),
     path(
         "settlement/configuration/",
         SettlementConfigurationView.as_view(),

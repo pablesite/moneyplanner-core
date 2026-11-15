@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import cast
 
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db.models import Max, Min, Q
 
 from accounting.models import LedgerEntry, LedgerTransaction
 from accounts.models import UserSettings
@@ -859,6 +859,27 @@ def build_expense_monthly_plan_vs_executed_summary(
         payload["_cashflow_role_weights"] = role_weights_by_slot_month
         payload["_categorized_ledger_by_key"] = categorized_ledger_by_key
     return payload
+
+
+def budget_fiscal_years(*, user, current_year: int) -> list[int]:
+    """Every year a budget can be read in, newest first.
+
+    Rows are listed one fiscal year at a time, so a client cannot know from the year it shows
+    that a mortgage mirror starts in 2016 or a term row ends in 2029. The span runs from the
+    earliest row to the latest start or term end, and always covers the years around today.
+    """
+
+    first, last = current_year - 1, current_year + 1
+    for model in (AnnualIncomeEntry, AnnualExpenseEntry):
+        bounds = model.objects.filter(user=user).aggregate(
+            first=Min("fiscal_year"), last=Max("fiscal_year"), term_last=Max("term_end_year")
+        )
+        if bounds["first"] is not None:
+            first = min(first, bounds["first"])
+        for value in (bounds["last"], bounds["term_last"]):
+            if value is not None:
+                last = max(last, value)
+    return list(range(last, first - 1, -1))
 
 
 def income_entry_applies_to_fiscal_year(*, entry: AnnualIncomeEntry, fiscal_year: int) -> bool:
