@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.51.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.50.1...moneyplanner-core-v0.51.0) (2026-11-15)
+
+
+### Features
+
+* **settlement:** replace the operating account of an active settlement ([79bc36c](https://github.com/pablesite/moneyplanner-core/commit/79bc36cf7b4fb01b4c7579866aa021946e2f5edd))
+
+
+### Bug Fixes
+
+* **budget:** prorate multi-year monthly term rows in every year ([98ff2ba](https://github.com/pablesite/moneyplanner-core/commit/98ff2ba56e0015e3f6b37304f029b7eb7356fe64))
+
 ## [0.50.1](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.50.0...moneyplanner-core-v0.50.1) (2026-11-02)
 
 
