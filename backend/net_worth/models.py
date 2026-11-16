@@ -384,15 +384,20 @@ class Liability(models.Model):
         MANUAL = "manual", "Manual"
 
     class ExpenseSubcategoryOverride(models.TextChoices):
-        HOUSING_HOME = "housing_home", "Vivienda y hogar"
+        HOUSING_HOME = "housing_home", "Vivienda"
         LIVING_EXPENSES = "living_expenses", "Alimentacion"
-        FAMILY_CHILDCARE = "family_childcare", "Familia y bebe"
+        FAMILY_CHILDCARE = "family_childcare", "Hijos"
+        FAMILY_PERSONAL_CARE = "family_personal_care", "Familia y cuidado personal"
         TRANSPORT_MOBILITY = "transport_mobility", "Transporte y movilidad"
         HEALTH_WELLBEING = "health_wellbeing", "Salud y bienestar"
-        EDUCATION_GROWTH = "education_growth", "Formacion y desarrollo"
-        LEISURE_LIFESTYLE = "leisure_lifestyle", "Ocio y estilo de vida"
+        EDUCATION_GROWTH = "education_growth", "Formacion y desarrollo personal"
+        LEISURE_LIFESTYLE = "leisure_lifestyle", "Ocio y restauracion"
+        TRAVEL_HOLIDAYS = "travel_holidays", "Viajes y vacaciones"
+        CLOTHING = "clothing", "Vestimenta"
+        TECHNOLOGY = "technology", "Tecnologia"
+        PERSONAL_ALLOWANCE = "personal_allowance", "Gastos personales"
         GIFTS_DONATIONS = "gifts_donations", "Regalos y donaciones"
-        FINANCIAL_COMMITMENTS = "financial_commitments", "Compromisos financieros"
+        FINANCIAL_COMMITMENTS = "financial_commitments", "Deuda: intereses y comisiones"
         OTHER_CONSUMPTION_EXPENSES = "other_consumption_expenses", "Otros gastos de consumo"
 
     user = models.ForeignKey(

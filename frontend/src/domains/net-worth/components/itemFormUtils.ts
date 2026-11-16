@@ -126,15 +126,20 @@ export const LIABILITY_PAYMENT_FREQUENCIES = [
 ];
 
 export const LIABILITY_EXPENSE_SUBCATEGORY_OPTIONS = [
-  { value: 'housing_home', label: 'Vivienda y hogar' },
+  { value: 'housing_home', label: 'Vivienda' },
   { value: 'living_expenses', label: 'Alimentacion' },
-  { value: 'family_childcare', label: 'Familia y bebe' },
+  { value: 'family_childcare', label: 'Hijos' },
+  { value: 'family_personal_care', label: 'Familia y cuidado personal' },
   { value: 'transport_mobility', label: 'Transporte y movilidad' },
   { value: 'health_wellbeing', label: 'Salud y bienestar' },
-  { value: 'education_growth', label: 'Formacion y desarrollo' },
-  { value: 'leisure_lifestyle', label: 'Ocio y estilo de vida' },
+  { value: 'education_growth', label: 'Formacion y desarrollo personal' },
+  { value: 'leisure_lifestyle', label: 'Ocio y restauracion' },
+  { value: 'travel_holidays', label: 'Viajes y vacaciones' },
+  { value: 'clothing', label: 'Vestimenta' },
+  { value: 'technology', label: 'Tecnologia' },
+  { value: 'personal_allowance', label: 'Gastos personales' },
   { value: 'gifts_donations', label: 'Regalos y donaciones' },
-  { value: 'financial_commitments', label: 'Compromisos financieros' },
+  { value: 'financial_commitments', label: 'Deuda: intereses y comisiones' },
   { value: 'other_consumption_expenses', label: 'Otros gastos de consumo' },
 ];
 
