@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.51.0...moneyplanner-core-v0.52.0) (2026-11-15)
+
+
+### Features
+
+* **budget:** expose the fiscal years that have budget data ([1852f8f](https://github.com/pablesite/moneyplanner-core/commit/1852f8f9d4c81a8d261234b5ed593e71f9b80def))
+
 ## [0.51.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.50.1...moneyplanner-core-v0.51.0) (2026-11-15)
 
 
