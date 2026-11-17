@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.52.0...moneyplanner-core-v0.53.0) (2026-11-16)
+
+
+### Features
+
+* **budget:** add consumption subcategories by purpose and rename the overloaded ones ([16ad689](https://github.com/pablesite/moneyplanner-core/commit/16ad68969342c852128318ec6da0e93f1fd86671))
+
 ## [0.52.0](https://github.com/pablesite/moneyplanner-core/compare/moneyplanner-core-v0.51.0...moneyplanner-core-v0.52.0) (2026-11-15)
 
 
